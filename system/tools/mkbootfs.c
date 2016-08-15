@@ -163,6 +163,7 @@ int import_manifest(const char *fn, unsigned *hdrsz, fs *fs) {
         char* dstfn = trim(line);
         char* srcfn = trim(eq);
         if ((e = import_manifest_entry(fn, lineno, dstfn, srcfn)) == NULL) {
+            fclose(fp);
             return -1;
         }
         sz += add_entry(fs, e);

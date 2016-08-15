@@ -537,6 +537,7 @@ void execscript(const char* fn) {
     while (fgets(line, sizeof(line), fp) != NULL) {
         execline(line);
     }
+    fclose(fp);
 }
 
 void console(void) {

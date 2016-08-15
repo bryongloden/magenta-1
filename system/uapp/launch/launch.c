@@ -59,12 +59,14 @@ static void check(const char* call, mx_status_t status) {
 
 int main(int argc, char** argv) {
     const char** env = NULL;
+    const char** tmpenv = NULL;
     size_t envsize = 0;
     const char* program = NULL;
     int program_fd = -1;
     bool basic = false;
     bool send_root = false;
     struct fd { int from, to; } *fds = NULL;
+    struct fd { int from, to; } *tmpfds = NULL
     size_t nfds = 0;
     bool send_loader_message = false;
     bool pass_loader_handle = false;
@@ -86,22 +88,24 @@ int main(int argc, char** argv) {
                 to = from;
                 // Fall through.
             case 2:
-                fds = realloc(fds, ++nfds * sizeof(fds[0]));
-                if (fds == NULL) {
+                tmpfds = realloc(fds, ++nfds * sizeof(fds[0]));
+                if (tmpfds == NULL) {
                     perror("realloc");
                     return 2;
                 }
+                fds = tmpfds;
                 fds[nfds - 1].from = from;
                 fds[nfds - 1].to = to;
                 break;
             }
             break;
         case 'e':
-            env = realloc(env, (++envsize + 1) * sizeof(env[0]));
-            if (env == NULL) {
+            tmpenv = realloc(env, (++envsize + 1) * sizeof(env[0]));
+            if (tmpenv == NULL) {
                 perror("realloc");
                 return 2;
             }
+            env = tmpenv;
             env[envsize - 1] = optarg;
             env[envsize] = NULL;
             break;
@@ -126,7 +130,12 @@ int main(int argc, char** argv) {
             break;
         case 's':
             send_root = true;
-            fds = realloc(fds, (nfds + 3) * sizeof(fds[0]));
+            tmpfds = realloc(fds, (nfds + 3) * sizeof(fds[0]));
+            if (tmpfds == NULL) {
+                perror("realloc");
+                return 2;
+            }
+            fds = tmpfds;
             for (int i = 0; i < 3; ++i)
                 fds[nfds + i].from = fds[nfds + i].to = i;
             nfds += 3;

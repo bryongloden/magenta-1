@@ -165,6 +165,7 @@ static mx_status_t eth_bind(mx_driver_t* drv, mx_device_t* dev) {
 
     mx_status_t r;
     if ((r = pci->claim_device(dev)) < 0) {
+        free(edev);
         return r;
     }
 

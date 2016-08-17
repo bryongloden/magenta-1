@@ -1,17 +1,8 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
+#include <ddk/completion.h>
 #include <ddk/device.h>
 #include <ddk/driver.h>
 #include <ddk/binding.h>
@@ -20,7 +11,6 @@
 
 #include <magenta/syscalls-ddk.h>
 #include <magenta/types.h>
-#include <runtime/completion.h>
 #include <sys/param.h>
 #include <assert.h>
 #include <limits.h>
@@ -60,7 +50,7 @@ typedef struct sata_device {
 #define get_sata_device(dev) containerof(dev, sata_device_t, device)
 
 static void sata_device_identify_complete(iotxn_t* txn) {
-    mxr_completion_signal((mxr_completion_t*)txn->context);
+    completion_signal((completion_t*)txn->context);
 }
 
 static mx_status_t sata_device_identify(sata_device_t* dev, mx_device_t* controller) {
@@ -72,7 +62,7 @@ static mx_status_t sata_device_identify(sata_device_t* dev, mx_device_t* control
         return status;
     }
 
-    mxr_completion_t completion = MXR_COMPLETION_INIT;
+    completion_t completion = COMPLETION_INIT;
 
     sata_pdata_t* pdata = sata_iotxn_pdata(txn);
     pdata->cmd = SATA_CMD_IDENTIFY_DEVICE;
@@ -84,7 +74,7 @@ static mx_status_t sata_device_identify(sata_device_t* dev, mx_device_t* control
     txn->length = 512;
 
     ahci_iotxn_queue(controller, txn);
-    mxr_completion_wait(&completion, MX_TIME_INFINITE);
+    completion_wait(&completion, MX_TIME_INFINITE);
 
     if (txn->status != NO_ERROR) {
         xprintf("%s: error %d in device identify\n", dev->device.name, txn->status);

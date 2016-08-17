@@ -8,6 +8,7 @@
 
 #include <unittest.h>
 #include <utils/tests/intrusive_containers/base_test_environments.h>
+#include <utils/tests/intrusive_containers/lfsr.h>
 
 namespace utils {
 namespace tests {
@@ -30,6 +31,7 @@ public:
     using SpBase               = TestEnvironmentSpecialized<TestEnvTraits>;
     using RefAction            = typename TestEnvironment<TestEnvTraits>::RefAction;
     using KeyType              = typename ContainerTraits::KeyType;
+    using OtherKeyType         = typename OtherContainerType::KeyType;
 
     enum class PopulateMethod {
         AscendingKey,
@@ -37,7 +39,16 @@ public:
         RandomKey,
     };
 
-    static constexpr KeyType BannedKeyValue() { return 0xF00D; };
+    static constexpr KeyType      kBannedKeyValue      = 0xF00D;
+    static constexpr OtherKeyType kBannedOtherKeyValue = 0xF00D;
+
+    // Utility method for checking the size of the container via either size()
+    // or size_slow(), depending on whether or not the container supports a
+    // constant order size operation.
+    template <typename CType>
+    static size_t Size(const CType& container) {
+        return SizeUtils<CType>::size(container);
+    }
 
     bool Populate(ContainerType& container,
                   PopulateMethod method,
@@ -47,7 +58,7 @@ public:
         EXPECT_EQ(0U, ObjType::live_obj_count(), "");
 
         for (size_t i = 0; i < OBJ_COUNT; ++i) {
-            EXPECT_EQ(i, container.size_slow(), "");
+            EXPECT_EQ(i, Size(container), "");
 
             // Unless explicitly told to do so, don't hold a reference in the
             // test environment for every 4th object created.  Note, this only
@@ -71,15 +82,36 @@ public:
 
             // Assign a key to the object based on the chosen populate method.
             KeyType key = 0;
+            OtherKeyType other_key = 0;
+
             switch (method) {
-            case PopulateMethod::RandomKey:     // TODO: implement me.  Until then, fall-thru
-            case PopulateMethod::AscendingKey:  key = i; break;
-            case PopulateMethod::DescendingKey: key = OBJ_COUNT - i - 1; break;
+                case PopulateMethod::RandomKey:
+                    do {
+                        key = key_lfsr_.GetNext();
+                    } while (key == kBannedKeyValue);
+
+                    do {
+                        other_key = other_key_lfsr_.GetNext();
+                    } while (other_key == kBannedOtherKeyValue);
+                    break;
+
+                case PopulateMethod::AscendingKey:
+                    key = i;
+                    other_key = static_cast<OtherKeyType>(key + OBJ_COUNT);
+                    break;
+
+                case PopulateMethod::DescendingKey:
+                    key = OBJ_COUNT - i - 1;
+                    other_key = static_cast<OtherKeyType>(key + OBJ_COUNT);
+                    break;
             }
+
+            DEBUG_ASSERT(key != kBannedKeyValue);
+            DEBUG_ASSERT(other_key != kBannedOtherKeyValue);
 
             // Set the primary key on the object.  Offset the "other" key by OBJ_COUNT
             new_object->SetKey(key);
-            OtherContainerTraits::SetKey(*new_object, key + OBJ_COUNT);
+            OtherContainerTraits::SetKey(*new_object, other_key);
 
             // Alternate whether or not we move the pointer, or "transfer" it.
             // Transfering means different things for different pointer types.
@@ -100,7 +132,7 @@ public:
             }
         }
 
-        EXPECT_EQ(OBJ_COUNT, container.size_slow(), "");
+        EXPECT_EQ(OBJ_COUNT, Size(container), "");
         EXPECT_EQ(OBJ_COUNT, ObjType::live_obj_count(), "");
 
         END_TEST;
@@ -149,7 +181,7 @@ public:
         }
 
         // Fail to look up something which should not be in the collection.
-        const auto& ptr = container().find(BannedKeyValue());
+        const auto& ptr = container().find(kBannedKeyValue);
         EXPECT_NULL(ptr, "");
 
         TestEnvironment<TestEnvTraits>::Reset();
@@ -174,7 +206,7 @@ public:
         size_t remaining = OBJ_COUNT;
 
         // Fail to erase a key which is not in the container.
-        EXPECT_NULL(container().erase(BannedKeyValue()), "");
+        EXPECT_NULL(container().erase(kBannedKeyValue), "");
 
         // Erase all of the even members of the collection by key.
         for (size_t i = 0; i < OBJ_COUNT; ++i) {
@@ -189,7 +221,7 @@ public:
             --remaining;
         }
 
-        EXPECT_EQ(remaining, container().size_slow(), "");
+        EXPECT_EQ(remaining, Size(container()), "");
 
         // Erase the remaining odd members.
         for (size_t i = 0; i < OBJ_COUNT; ++i) {
@@ -203,7 +235,7 @@ public:
             --remaining;
         }
 
-        EXPECT_EQ(0u, container().size_slow(), "");
+        EXPECT_EQ(0u, Size(container()), "");
 
         TestEnvironment<TestEnvTraits>::Reset();
         END_TEST;
@@ -234,7 +266,19 @@ private:
 
     void ReleaseObject(size_t ndx) { Sp::ReleaseObject(ndx); }
     bool HoldingObject(size_t ndx) const { return Sp::HoldingObject(ndx); }
+
+    Lfsr<KeyType>      key_lfsr_        = Lfsr<KeyType>(0xa2328b73e343fd0f);
+    Lfsr<OtherKeyType> other_key_lfsr_  = Lfsr<OtherKeyType>(0xbd5a2efcc5ba8344);
 };
+
+// Explicit declaration of constexpr storage.
+template <typename TestEnvTraits>
+constexpr typename AssociativeContainerTestEnvironment<TestEnvTraits>::KeyType
+AssociativeContainerTestEnvironment<TestEnvTraits>::kBannedKeyValue;
+
+template <typename TestEnvTraits>
+constexpr typename AssociativeContainerTestEnvironment<TestEnvTraits>::OtherKeyType
+AssociativeContainerTestEnvironment<TestEnvTraits>::kBannedOtherKeyValue;
 
 }  // namespace intrusive_containers
 }  // namespace tests

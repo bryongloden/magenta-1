@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #include <system/listnode.h>
 
@@ -19,10 +9,10 @@
 #include <mxio/debug.h>
 #include <mxio/vfs.h>
 
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <fcntl.h>
+#include <sys/stat.h>
 
 #include "vfs.h"
 #include "dnode.h"
@@ -178,16 +168,12 @@ static mx_status_t _mem_create(mnode_t* parent, mnode_t** out,
 static mx_status_t mem_create(vnode_t* vn, vnode_t** out, const char* name, size_t len, uint32_t mode) {
     mnode_t* parent = vn->pdata;
     mnode_t* mem;
-    mx_status_t r = _mem_create(parent, &mem, name, len, false);
+    mx_status_t r = _mem_create(parent, &mem, name, len, S_ISDIR(mode));
     if (r >= 0) {
         vn_acquire(&mem->vn);
         *out = &mem->vn;
     }
     return r;
-}
-
-static mx_status_t mem_gethandles(vnode_t* vn, mx_handle_t* handles, uint32_t* ids) {
-    return ERR_NOT_SUPPORTED;
 }
 
 ssize_t memfs_ioctl(vnode_t* vn, uint32_t op,
@@ -224,7 +210,6 @@ static vnode_ops_t vn_mem_ops = {
     .getattr = mem_getattr,
     .readdir = memfs_readdir,
     .create = mem_create,
-    .gethandles = mem_gethandles,
     .unlink = memfs_unlink,
 };
 
@@ -238,7 +223,6 @@ static vnode_ops_t vn_mem_ops_dir = {
     .getattr = mem_getattr,
     .readdir = memfs_readdir,
     .create = mem_create,
-    .gethandles = mem_gethandles,
     .unlink = memfs_unlink,
 };
 

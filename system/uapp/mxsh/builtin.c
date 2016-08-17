@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -210,6 +200,21 @@ done:
     return r;
 }
 
+static int mxc_mkdir(int argc, char** argv) {
+    if (argc < 2) {
+        fprintf(stderr, "usage: mkdir <path>\n");
+        return -1;
+    }
+    while (argc > 1) {
+        argc--;
+        argv++;
+        if (mkdir(argv[0], 0755)) {
+            fprintf(stderr, "error: failed to make directory '%s'\n", argv[0]);
+        }
+    }
+    return 0;
+}
+
 static int mxc_rm(int argc, char** argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: rm <filename>\n");
@@ -386,6 +391,7 @@ builtin_t builtins[] = {
     {"dm", mxc_dm, "send command to device manager"},
     {"list", mxc_list, "display a text file with line numbers"},
     {"ls", mxc_ls, "list directory contents"},
+    {"mkdir", mxc_mkdir, "create a directory" },
     {"rm", mxc_rm, "delete a file"},
     {"runtests", mxc_runtests, "run all test programs"},
     {"msleep", mxc_msleep, "pause for milliseconds"},

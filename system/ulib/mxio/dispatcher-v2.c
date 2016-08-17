@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -59,11 +49,11 @@ static void destroy_handler(mxio_dispatcher_t* md, handler_t* handler) {
 
 static void disconnect_handler(mxio_dispatcher_t* md, handler_t* handler) {
     // unbind, so we get no further messages
-    mx_io_port_bind(md->ioport, (uintptr_t) handler, handler->h, 0);
+    mx_io_port_bind(md->ioport, (uint64_t)(uintptr_t)handler, handler->h, 0);
 
     // send a synthetic message so we know when it's safe to destroy
     mx_io_packet_t packet;
-    packet.hdr.key = (uintptr_t) handler;
+    packet.hdr.key = (uint64_t)(uintptr_t)handler;
     packet.signals = MX_SIGNAL_SIGNALED;
     mx_io_port_queue(md->ioport, &packet, sizeof(packet));
 
@@ -82,7 +72,7 @@ again:
             printf("dispatcher: ioport wait failed %d\n", r);
             break;
         }
-        handler_t* handler = (void*) (uintptr_t)packet.hdr.key;
+        handler_t* handler = (void*)(uintptr_t)packet.hdr.key;
         if (handler->flags & FLAG_DISCONNECTED) {
             // handler is awaiting gc
             // ignore events for it until we get the synthetic "destroy" event
@@ -174,7 +164,7 @@ mx_status_t mxio_dispatcher_add(mxio_dispatcher_t* md, mx_handle_t h, void* cb, 
 
     mxr_mutex_lock(&md->lock);
     list_add_tail(&md->list, &handler->node);
-    if ((r = mx_io_port_bind(md->ioport, (uintptr_t) handler, h,
+    if ((r = mx_io_port_bind(md->ioport, (uint64_t)(uintptr_t)handler, h,
                              MX_SIGNAL_READABLE | MX_SIGNAL_PEER_CLOSED)) < 0) {
         list_delete(&handler->node);
     }

@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #pragma once
 
@@ -56,7 +46,7 @@ typedef enum {CSW_SUCCESS, CSW_FAILED, CSW_PHASE_ERROR, CSW_INVALID,
 
 // signatures in header and status
 #define CBW_SIGNATURE               0x43425355
-#define CSW_SIGNATURE               0x55425355
+#define CSW_SIGNATURE               0x53425355
 
 // command lengths
 #define MS_INQUIRY_COMMAND_LENGTH                 6
@@ -80,5 +70,3 @@ typedef enum {CSW_SUCCESS, CSW_FAILED, CSW_PHASE_ERROR, CSW_INVALID,
 #define MS_READ_FORMAT_CAPACITIES_TRANSFER_LENGTH 0xFC
 #define MS_READ_CAPACITY10_TRANSFER_LENGTH        0x08
 #define MS_READ_CAPACITY16_TRANSFER_LENGTH        0x20
-
-

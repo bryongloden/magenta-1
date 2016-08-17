@@ -1,21 +1,11 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 // <unistd.h> declares environ only under _GNU_SOURCE.
 #define _GNU_SOURCE
 
-#include <launchpad/launchpad.h>
+#include "launch.h"
 #include <launchpad/vmo.h>
 
 #include <magenta/syscalls.h>
@@ -75,7 +65,6 @@ mx_handle_t launchpad_launch_mxio_etc(const char* name,
     if (name == NULL)
         name = filename;
 
-    mx_handle_t proc = MX_HANDLE_INVALID;
     mx_status_t status = launchpad_create(name, &lp);
     if (status == NO_ERROR) {
         status = launchpad_elf_load(lp, launchpad_vmo_from_file(filename));
@@ -91,12 +80,9 @@ mx_handle_t launchpad_launch_mxio_etc(const char* name,
             status = add_all_mxio(lp);
         if (status == NO_ERROR)
             status = launchpad_add_handles(lp, hnds_count, handles, ids);
-        if (status == NO_ERROR)
-            proc = launchpad_start(lp);
     }
-    launchpad_destroy(lp);
 
-    return status == NO_ERROR ? proc : status;
+    return finish_launch(lp, status, handles, hnds_count);
 }
 
 mx_handle_t launchpad_launch_mxio(const char* name,

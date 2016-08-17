@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #pragma once
 
@@ -21,6 +11,13 @@ __BEGIN_CDECLS;
 // Hub request types
 #define USB_RECIP_HUB   (USB_TYPE_CLASS | USB_RECIP_DEVICE)
 #define USB_RECIP_PORT  (USB_TYPE_CLASS | USB_RECIP_OTHER)
+
+// Hub requests
+#define USB_HUB_SET_DEPTH       12
+
+// Hub descriptor types
+#define USB_HUB_DESC_TYPE       0x29
+#define USB_HUB_DESC_TYPE_SS    0x2A    // for superspeed hubs
 
 // Hub Class Feature Selectors (USB 2.0 spec Table 11.17)
 #define USB_FEATURE_C_HUB_LOCAL_POWER   0

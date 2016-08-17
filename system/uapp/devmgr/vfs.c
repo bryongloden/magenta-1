@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #include "vfs.h"
 #include "dnode.h"
@@ -122,7 +112,7 @@ static mx_status_t vfs_walk(vnode_t* vn, vnode_t** out,
 static mx_status_t vfs_open(vnode_t* vndir, vnode_t** out,
                             const char* path, const char** pathout,
                             uint32_t flags, uint32_t mode) {
-    xprintf("vfs_open: path='%s' flags=%d\n", path, flags);
+    xprintf("vfs_open: path='%s' flags=%d mode=%x\n", path, flags, mode);
     mx_status_t r;
     if ((r = vfs_walk(vndir, &vndir, path, &path)) < 0) {
         return r;
@@ -180,10 +170,13 @@ mx_status_t vfs_fill_dirent(vdirent_t* de, size_t delen,
     return sz;
 }
 
-static mx_status_t vfs_get_handles(vnode_t* vn, mx_handle_t* hnds, uint32_t* ids, const char* trackfn) {
+static mx_status_t vfs_get_handles(vnode_t* vn, bool as_dir, mx_handle_t* hnds, uint32_t* ids, const char* trackfn) {
     mx_status_t r;
-    if ((r = vn->ops->gethandles(vn, hnds, ids)) == ERR_NOT_SUPPORTED) {
-        // local vnode, we will create the handles
+    if (vn->flags & V_FLAG_DEVICE && !as_dir) {
+        // opening a device, get devmgr handles
+        r = devmgr_get_handles((mx_device_t*)vn->pdata, hnds, ids);
+    } else {
+        // local vnode or device as a directory, we will create the handles
         hnds[0] = vfs_create_handle(vn, trackfn);
         ids[0] = MX_HND_TYPE_MXIO_REMOTE;
         r = 1;
@@ -233,7 +226,7 @@ static mx_status_t _vfs_open(mxrio_msg_t* msg, mx_handle_t rh,
     }
 #endif
     uint32_t ids[VFS_MAX_HANDLES];
-    if ((r = vfs_get_handles(vn, msg->handle, ids, (const char*)msg->data)) < 0) {
+    if ((r = vfs_get_handles(vn, flags & O_DIRECTORY, msg->handle, ids, (const char*)msg->data)) < 0) {
         vn->ops->close(vn);
         return r;
     }

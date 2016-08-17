@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #include <assert.h>
 #include <dirent.h>
@@ -145,7 +135,7 @@ mx_status_t mxio_close(mxio_t* io) {
     return io->ops->close(io);
 }
 
-static mx_status_t __mxio_open(mxio_t** io, const char* path, int flags) {
+static mx_status_t __mxio_open(mxio_t** io, const char* path, int flags, uint32_t mode) {
     mxio_t* iodir;
     if (path == NULL) {
         return ERR_INVALID_ARGS;
@@ -167,7 +157,7 @@ static mx_status_t __mxio_open(mxio_t** io, const char* path, int flags) {
     mxio_acquire(iodir);
     mxr_mutex_unlock(&mxio_lock);
 
-    mx_status_t r = iodir->ops->open(iodir, path, flags, io);
+    mx_status_t r = iodir->ops->open(iodir, path, flags, mode, io);
     mxio_release(iodir);
     return r;
 }
@@ -213,7 +203,7 @@ static mx_status_t __mxio_opendir_containing(mxio_t** io, const char* path, cons
     }
 
     *_name = name;
-    r = iodir->ops->open(iodir, dirpath, O_DIRECTORY, io);
+    r = iodir->ops->open(iodir, dirpath, O_DIRECTORY, 0, io);
 
 fail:
     mxio_release(iodir);
@@ -294,7 +284,7 @@ void __libc_extensions_init(uint32_t handle_count,
 
     if (mxio_root_handle) {
         mxio_root_init = true;
-        __mxio_open(&mxio_cwd_handle, "/", O_DIRECTORY);
+        __mxio_open(&mxio_cwd_handle, "/", O_DIRECTORY, 0);
     } else {
         // placeholder null handle
         mxio_root_handle = mxio_null_create();
@@ -635,8 +625,15 @@ int open(const char* path, int flags, ...) {
     mxio_t* io = NULL;
     mx_status_t r;
     int fd;
+    uint32_t mode = 0;
 
-    if ((r = __mxio_open(&io, path, flags)) < 0) {
+    if (flags & O_CREAT) {
+        va_list ap;
+        va_start(ap, flags);
+        mode = va_arg(ap, uint32_t) & 0777;
+        va_end(ap);
+    }
+    if ((r = __mxio_open(&io, path, flags, mode)) < 0) {
         return ERROR(r);
     }
     if ((fd = mxio_bind_to_fd(io, -1, 0)) < 0) {
@@ -646,6 +643,21 @@ int open(const char* path, int flags, ...) {
     }
     return fd;
 }
+
+int mkdir(const char* path, mode_t mode) {
+    mxio_t* io = NULL;
+    mx_status_t r;
+
+    mode = (mode & 0777) | S_IFDIR;
+
+    if ((r = __mxio_open(&io, path, O_CREAT|O_EXCL|O_RDWR, mode)) < 0) {
+        return ERROR(r);
+    }
+    io->ops->close(io);
+    mxio_release(io);
+    return 0;
+}
+
 
 int fstat(int fd, struct stat* s) {
     mxio_t* io = fd_to_io(fd);
@@ -661,7 +673,7 @@ int stat(const char* fn, struct stat* s) {
     mxio_t* io;
     mx_status_t r;
 
-    if ((r = __mxio_open(&io, fn, 0)) < 0) {
+    if ((r = __mxio_open(&io, fn, 0, 0)) < 0) {
         return ERROR(r);
     }
     r = mxio_stat(io, s);
@@ -796,7 +808,7 @@ char *getcwd(char* buf, size_t size) {
 int chdir(const char* path) {
     mxio_t* io;
     mx_status_t r;
-    if ((r = __mxio_open(&io, path, O_DIRECTORY)) < 0) {
+    if ((r = __mxio_open(&io, path, O_DIRECTORY, 0)) < 0) {
         return STATUS(r);
     }
     mxr_mutex_lock(&mxio_cwd_lock);

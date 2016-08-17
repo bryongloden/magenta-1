@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #pragma once
 
@@ -176,8 +166,8 @@ mx_handle_t launchpad_start(launchpad_t* lp);
 // launchpad_arguments, launchpad_environ, launchpad_add_handles,
 // launchpad_start, launchpad_destroy.
 //
-// Returns the process handle on success, giving ownership to the
-// caller; or an error code on failure.
+// Returns the process handle on success, giving ownership to the caller;
+// or an error code on failure.  In all cases, the handles are consumed.
 mx_handle_t launchpad_launch(const char* name,
                              int argc, const char* const* argv,
                              const char* const* envp,
@@ -192,13 +182,14 @@ mx_handle_t launchpad_launch(const char* name,
 // launchpad_environ, launchpad_clone_mxio_root, launchpad_clone_fd,
 // launchpad_start, launchpad_destroy.
 //
-// Returns the process handle on success, giving ownership to the
-// caller; or an error code on failure.
+// Returns the process handle on success, giving ownership to the caller;
+// or an error code on failure.
 mx_handle_t launchpad_launch_mxio(const char* name,
                                   int argc, const char* const* argv);
 
 // Same as launchpad_launch_mxio, but also passes additional handles
 // like launchpad_launch, and uses envp rather than global environ.
+// In all cases, the handles are consumed.
 mx_handle_t launchpad_launch_mxio_etc(const char* name,
                                       int argc, const char* const* argv,
                                       const char* const* envp,

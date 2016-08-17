@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #include <ddk/device.h>
 #include <ddk/binding.h>
@@ -105,8 +95,7 @@ static int vc_input_thread(void* arg) {
     assert(listener->fd >= 0);
     xprintf("vc: input thread started for %s\n", listener->dev_name);
 
-    uint8_t report_buf[9];
-    uint8_t* rpt = &report_buf[1];
+    uint8_t report_buf[8];
     hid_keys_t key_state[2];
     hid_keys_t key_delta;
     memset(&key_state[0], 0, sizeof(hid_keys_t));
@@ -124,14 +113,12 @@ static int vc_input_thread(void* arg) {
         if ((size_t)(r) != sizeof(report_buf)) {
             continue;
         }
-        // verify this is report 0
-        if (report_buf[0] != 0) continue;
         // eat the input if there is no active vc
         if (!active_vc) continue;
         // process the key
         int consumed = 0;
         uint8_t keycode;
-        hid_kbd_parse_report(rpt, &key_state[cur_idx]);
+        hid_kbd_parse_report(report_buf, &key_state[cur_idx]);
 
         hid_kbd_pressed_keys(&key_state[prev_idx], &key_state[cur_idx], &key_delta);
         hid_for_every_key(&key_delta, keycode) {
@@ -240,7 +227,7 @@ static int vc_input_thread(void* arg) {
                 active_vc->flags |= VC_FLAG_RESETSCROLL;
                 device_state_set(&active_vc->device, DEV_STATE_READABLE);
             }
-            mx_hid_fifo_write(&active_vc->fifo, rpt, sizeof(report_buf - 1));
+            mx_hid_fifo_write(&active_vc->fifo, report_buf, sizeof(report_buf));
             mxr_mutex_unlock(&active_vc->fifo.lock);
         }
 

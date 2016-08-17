@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #include "vfs.h"
 #include "dnode.h"
@@ -73,10 +63,6 @@ static mx_status_t vnb_create(vnode_t* vn, vnode_t** out, const char* name, size
     return ERR_NOT_SUPPORTED;
 }
 
-static mx_status_t vnb_gethandles(vnode_t* vn, mx_handle_t* handles, uint32_t* ids) {
-    return ERR_NOT_SUPPORTED;
-}
-
 static vnode_ops_t vn_boot_ops = {
     .release = vnb_release,
     .open = memfs_open,
@@ -87,7 +73,6 @@ static vnode_ops_t vn_boot_ops = {
     .getattr = vnb_getattr,
     .readdir = memfs_readdir,
     .create = vnb_create,
-    .gethandles = vnb_gethandles,
     .ioctl = memfs_ioctl,
     .unlink = memfs_unlink,
 };

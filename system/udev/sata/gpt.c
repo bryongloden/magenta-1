@@ -1,17 +1,8 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
+#include <ddk/completion.h>
 #include <ddk/device.h>
 #include <ddk/driver.h>
 #include <ddk/binding.h>
@@ -19,7 +10,6 @@
 
 #include <magenta/syscalls-ddk.h>
 #include <magenta/types.h>
-#include <runtime/completion.h>
 #include <runtime/mutex.h>
 #include <sys/param.h>
 #include <assert.h>
@@ -41,15 +31,15 @@
     } while (0)
 #endif
 
-#define TXN_SIZE PAGE_SIZE // just a random choice
+#define TXN_SIZE 0x4000 // 128 partition entries
 
-typedef struct gpt_part_device {
+typedef struct gptpart_device {
     mx_device_t device;
     gpt_entry_t gpt_entry;
     uint64_t blksize;
-} gpt_partdev_t;
+} gptpart_device_t;
 
-#define get_gpt_device(dev) containerof(dev, gpt_partdev_t, device)
+#define get_gptpart_device(dev) containerof(dev, gptpart_device_t, device)
 
 static void uint8_to_guid_string(char* dst, uint8_t* src) {
     sprintf(dst, "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X", src[3], src[2], src[1], src[0], src[5], src[4], src[7], src[6], src[9], src[8], src[15], src[14], src[13], src[12], src[11], src[10]);
@@ -62,96 +52,21 @@ static void utf16_to_cstring(char* dst, uint8_t* src, size_t count) {
     }
 }
 
-static size_t gpt_getsize(gpt_partdev_t* dev) {
+static uint64_t getsize(gptpart_device_t* dev) {
     // last LBA is inclusive
     uint64_t lbacount = dev->gpt_entry.last_lba - dev->gpt_entry.first_lba + 1;
     return lbacount * dev->blksize;
 }
 
-static void gpt_read_sync_complete(iotxn_t* txn) {
-    mxr_completion_signal((mxr_completion_t*)txn->context);
-}
-
 // implement device protocol:
 
-static ssize_t gpt_partdev_read(mx_device_t* dev, void* buf, size_t count, mx_off_t off) {
-    gpt_partdev_t* device = get_gpt_device(dev);
-    iotxn_t* txn;
-    mx_status_t status = iotxn_alloc(&txn, 0, TXN_SIZE, 0);
-    if (status != NO_ERROR) {
-        xprintf("%s: error %d allocating iotxn\n", dev->name, status);
-        return status;
-    }
-
-    mxr_completion_t completion = MXR_COMPLETION_INIT;
-
-    // offset must be aligned to block size
-    if (off % device->blksize) {
-        xprintf("%s: offset 0x%llx is not aligned to blksize=%llu!\n", dev->name, off, device->blksize);
-        return ERR_INVALID_ARGS;
-    }
-
-    // sanity check
-    uint64_t off_lba = off / device->blksize;
-    uint64_t first = device->gpt_entry.first_lba;
-    uint64_t last = device->gpt_entry.last_lba;
-    if (first + off_lba > last) {
-        xprintf("%s: offset 0x%llx is past the end of partition!\n", dev->name, off);
-        return ERR_INVALID_ARGS;
-    }
-    // constrain if too many bytes are requested
-    uint64_t c = MIN((last - (first + off_lba)) * device->blksize, count);
-
-    // queue iotxn's until c bytes is read
-    mx_off_t offset = off;
-    mx_off_t toff = 0;
-    void* ptr = buf;
-    while (c > 0) {
-        txn->opcode = IOTXN_OP_READ;
-        txn->offset = first * device->blksize + offset;
-        txn->length = c > TXN_SIZE ? TXN_SIZE : c;
-        txn->complete_cb = gpt_read_sync_complete;
-        txn->context = &completion;
-
-        iotxn_queue(dev->parent, txn);
-        mxr_completion_wait(&completion, MX_TIME_INFINITE);
-
-        if (txn->status != NO_ERROR) {
-            xprintf("%s: error %d in iotxn\n", dev->name, txn->status);
-            txn->ops->release(txn);
-            return txn->status;
-        }
-
-        // get the data!
-        txn->ops->copyfrom(txn, ptr, txn->actual, toff);
-
-        ptr += txn->actual;
-        offset += txn->actual;
-        toff += txn->actual;
-        c -= txn->actual;
-
-        // give up if the device read fewer bytes than requested
-        if (txn->actual < txn->length) break;
-
-        // reset so we can keep reading
-        mxr_completion_reset(&completion);
-    }
-
-    txn->ops->release(txn);
-    return toff;
-}
-
-static ssize_t gpt_partdev_write(mx_device_t* dev, const void* buf, size_t count, mx_off_t off) {
-    return ERR_NOT_SUPPORTED;
-}
-
-static ssize_t gpt_partdev_ioctl(mx_device_t* dev, uint32_t op, const void* cmd, size_t cmdlen, void* reply, size_t max) {
-    gpt_partdev_t* device = get_gpt_device(dev);
+static ssize_t gpt_ioctl(mx_device_t* dev, uint32_t op, const void* cmd, size_t cmdlen, void* reply, size_t max) {
+    gptpart_device_t* device = get_gptpart_device(dev);
     switch (op) {
     case BLOCK_OP_GET_SIZE: {
         uint64_t* size = reply;
         if (max < sizeof(*size)) return ERR_NOT_ENOUGH_BUFFER;
-        *size = gpt_getsize(device);
+        *size = getsize(device);
         return sizeof(*size);
     }
     case BLOCK_OP_GET_BLOCKSIZE: {
@@ -178,16 +93,37 @@ static ssize_t gpt_partdev_ioctl(mx_device_t* dev, uint32_t op, const void* cmd,
     }
 }
 
-static mx_off_t gpt_partdev_getsize(mx_device_t* dev) {
-    return gpt_getsize(get_gpt_device(dev));
+static void gpt_iotxn_queue(mx_device_t* dev, iotxn_t* txn) {
+    gptpart_device_t* device = get_gptpart_device(dev);
+    // sanity check
+    uint64_t off_lba = txn->offset / device->blksize;
+    uint64_t first = device->gpt_entry.first_lba;
+    uint64_t last = device->gpt_entry.last_lba;
+    if (first + off_lba > last) {
+        xprintf("%s: offset 0x%llx is past the end of partition!\n", dev->name, txn->offset);
+        txn->ops->complete(txn, ERR_INVALID_ARGS, 0);
+        return;
+    }
+    // constrain if too many bytes are requested
+    txn->length = MIN((last - (first + off_lba)) * device->blksize, txn->length);
+    // adjust offset
+    txn->offset = first * device->blksize + txn->offset;
+    iotxn_queue(dev->parent, txn);
 }
 
-static mx_protocol_device_t gpt_partdev_proto = {
-    .read = gpt_partdev_read,
-    .write = gpt_partdev_write,
-    .ioctl = gpt_partdev_ioctl,
-    .get_size = gpt_partdev_getsize,
+static mx_off_t gpt_getsize(mx_device_t* dev) {
+    return getsize(get_gptpart_device(dev));
+}
+
+static mx_protocol_device_t gpt_proto = {
+    .ioctl = gpt_ioctl,
+    .iotxn_queue = gpt_iotxn_queue,
+    .get_size = gpt_getsize,
 };
+
+static void gpt_read_sync_complete(iotxn_t* txn) {
+    completion_signal((completion_t*)txn->context);
+}
 
 static mx_status_t gpt_bind(mx_driver_t* drv, mx_device_t* dev) {
     uint64_t blksize;
@@ -209,7 +145,7 @@ static mx_status_t gpt_bind(mx_driver_t* drv, mx_device_t* dev) {
         xprintf("gpt: error %d allocating iotxn\n", status);
     }
 
-    mxr_completion_t completion = MXR_COMPLETION_INIT;
+    completion_t completion = COMPLETION_INIT;
 
     // read partition table header synchronously (LBA1)
     txn->opcode = IOTXN_OP_READ;
@@ -219,7 +155,7 @@ static mx_status_t gpt_bind(mx_driver_t* drv, mx_device_t* dev) {
     txn->context = &completion;
 
     iotxn_queue(dev, txn);
-    mxr_completion_wait(&completion, MX_TIME_INFINITE);
+    completion_wait(&completion, MX_TIME_INFINITE);
 
     if (txn->status != NO_ERROR) {
         xprintf("gpt: error %d reading partition header\n", txn->status);
@@ -251,14 +187,14 @@ static mx_status_t gpt_bind(mx_driver_t* drv, mx_device_t* dev) {
     txn->complete_cb = gpt_read_sync_complete;
     txn->context = &completion;
 
-    mxr_completion_reset(&completion);
+    completion_reset(&completion);
     iotxn_queue(dev, txn);
-    mxr_completion_wait(&completion, MX_TIME_INFINITE);
+    completion_wait(&completion, MX_TIME_INFINITE);
 
     for (unsigned i = 0; i < header.entries_count; i++) {
         if (i * header.entries_sz > txn->actual) break;
 
-        gpt_partdev_t* device = calloc(1, sizeof(gpt_partdev_t));
+        gptpart_device_t* device = calloc(1, sizeof(gptpart_device_t));
         if (!device) {
             xprintf("gpt: out of memory!\n");
             txn->ops->release(txn);
@@ -267,7 +203,7 @@ static mx_status_t gpt_bind(mx_driver_t* drv, mx_device_t* dev) {
 
         char name[8];
         snprintf(name, sizeof(name), "part%u", i);
-        status = device_init(&device->device, drv, name, &gpt_partdev_proto);
+        status = device_init(&device->device, drv, name, &gpt_proto);
         if (status) {
             xprintf("gpt: failed to init device\n");
             txn->ops->release(txn);

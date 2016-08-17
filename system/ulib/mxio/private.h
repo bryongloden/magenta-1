@@ -1,16 +1,6 @@
-// Copyright 2016 The Fuchsia Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #pragma once
 
@@ -40,7 +30,7 @@ typedef struct mxio_ops {
     off_t (*seek)(mxio_t* io, off_t offset, int whence);
     mx_status_t (*misc)(mxio_t* io, uint32_t op, uint32_t maxreply, void* data, size_t len);
     mx_status_t (*close)(mxio_t* io);
-    mx_status_t (*open)(mxio_t* io, const char* path, int32_t flags, mxio_t** out);
+    mx_status_t (*open)(mxio_t* io, const char* path, int32_t flags, uint32_t mode, mxio_t** out);
     mx_status_t (*clone)(mxio_t* io, mx_handle_t* out_handles, uint32_t* out_types);
     mx_status_t (*wait)(mxio_t* io, uint32_t events, uint32_t* pending, mx_time_t timeout);
     ssize_t (*ioctl)(mxio_t* io, uint32_t op, const void* in_buf, size_t in_len, void* out_buf, size_t out_len);
@@ -99,8 +89,8 @@ static inline off_t mxio_seek(mxio_t* io, off_t offset, int whence) {
 static inline mx_status_t mxio_misc(mxio_t* io, uint32_t op, uint32_t maxreply, void* data, size_t len) {
     return io->ops->misc(io, op, maxreply, data, len);
 }
-static inline mx_status_t mxio_open(mxio_t* io, const char* path, int32_t flags, mxio_t** out) {
-    return io->ops->open(io, path, flags, out);
+static inline mx_status_t mxio_open(mxio_t* io, const char* path, int32_t flags, uint32_t mode, mxio_t** out) {
+    return io->ops->open(io, path, flags, mode, out);
 }
 mx_status_t mxio_close(mxio_t* io);
 
@@ -132,7 +122,7 @@ ssize_t mxio_default_write(mxio_t* io, const void* _data, size_t len);
 off_t mxio_default_seek(mxio_t* io, off_t offset, int whence);
 mx_status_t mxio_default_misc(mxio_t* io, uint32_t op, uint32_t arg, void* data, size_t len);
 mx_status_t mxio_default_close(mxio_t* io);
-mx_status_t mxio_default_open(mxio_t* io, const char* path, int32_t flags, mxio_t** out);
+mx_status_t mxio_default_open(mxio_t* io, const char* path, int32_t flags, uint32_t mode, mxio_t** out);
 mx_handle_t mxio_default_clone(mxio_t* io, mx_handle_t* handles, uint32_t* types);
 mx_status_t mxio_default_wait(mxio_t* io, uint32_t events, uint32_t* pending, mx_time_t timeout);
 ssize_t mxio_default_ioctl(mxio_t* io, uint32_t op, const void* in_buf, size_t in_len, void* out_buf, size_t out_len);

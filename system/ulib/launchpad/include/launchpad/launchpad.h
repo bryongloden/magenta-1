@@ -60,7 +60,9 @@ mx_status_t launchpad_clone_fd(launchpad_t* lp, int fd, int target_fd);
 mx_status_t launchpad_add_pipe(launchpad_t* lp, int* fd_out, int target_fd);
 
 // Map in the PT_LOAD segments of the ELF file image found in a VM
-// object.  This does not check the file for a PT_INTERP program
+// object.  If the file has a PT_GNU_STACK program header with a
+// nonzero p_memsz field, this calls launchpad_set_stack_size with
+// that value.  This does not check the file for a PT_INTERP program
 // header.  This consumes the VM object handle on success but not on
 // failure.  If the 'vmo' argument is a negative error code rather
 // than a handle, that result is just returned immediately; so this
@@ -144,6 +146,12 @@ mx_status_t launchpad_add_vdso_vmo(launchpad_t* lp);
 // loading, and records the vDSO's base address for launchpad_start
 // to pass to the new process's initial thread.
 mx_status_t launchpad_load_vdso(launchpad_t* lp, mx_handle_t vmo);
+
+// Set the size of the initial thread's stack, and return the old setting.
+// The initial setting after launchpad_create is a system default.
+// If this is passed zero, then there will be no stack allocated.
+// Otherwise, the size passed is rounded up to a multiple of the page size.
+size_t launchpad_set_stack_size(launchpad_t* lp, size_t new_size);
 
 // Start the process running.  If the send_loader_message flag is
 // set and this succeeds in sending the initial bootstrap message,

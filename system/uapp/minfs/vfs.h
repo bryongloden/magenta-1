@@ -8,6 +8,7 @@
 #include <magenta/types.h>
 #include <mxio/vfs.h>
 
+#include "misc.h"
 
 // VFS Helpers (vfs.c)
 
@@ -106,23 +107,8 @@ mx_status_t bcache_read(bcache_t* bc, uint32_t bno, void* data, uint32_t off, ui
 
 uint32_t bcache_max_block(bcache_t* bc);
 
-
-// FNV-1a Hash
-// http://www.isthe.com/chongo/tech/comp/fnv/index.html
-
-#define FNV32_PRIME (16777619)
-#define FNV32_OFFSET_BASIS (2166136261)
-
-// for bits 0..15
-static inline uint32_t fnv_1a_tiny(uint32_t n, uint32_t bits) {
-    uint32_t hash = FNV32_OFFSET_BASIS;
-    hash = (hash ^ (n & 0xFF)) * FNV32_PRIME; n >>= 8;
-    hash = (hash ^ (n & 0xFF)) * FNV32_PRIME; n >>= 8;
-    hash = (hash ^ (n & 0xFF)) * FNV32_PRIME; n >>= 8;
-    hash = (hash ^ n) * FNV32_PRIME;
-    return ((hash >> bits) ^ hash) & ((1 << bits) - 1);
-}
-
+// drop all non-busy, non-dirty blocks
+void bcache_invalidate(bcache_t* bc);
 
 // General Utilities
 
@@ -138,7 +124,9 @@ static inline uint32_t fnv_1a_tiny(uint32_t n, uint32_t bits) {
 #define TRACE_IO      0x0200
 #define TRACE_RPC     0x0400
 #define TRACE_VERBOSE 0x1000
-#define TRACE_ALL     0x0031
+
+#define TRACE_SOME    0x0211
+#define TRACE_ALL     0xFFFF
 
 // Enable trace printf()s
 

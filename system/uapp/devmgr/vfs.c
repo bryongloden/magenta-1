@@ -78,7 +78,7 @@ static mx_status_t vfs_walk(vnode_t* vn, vnode_t** out,
         }
         if (vn->flags & V_FLAG_REMOTE) {
             // remote filesystem mount, caller must resolve
-            printf("vfs_walk: vn=%p name='%s' (remote)\n", vn, path);
+            xprintf("vfs_walk: vn=%p name='%s' (remote)\n", vn, path);
             *out = vn;
             *pathout = path;
 #if WITH_REPLY_PIPE
@@ -481,6 +481,10 @@ void vfs_init(vnode_t* root) {
     }
     mxr_thread_t* t;
     mxr_thread_create(vfs_watchdog, NULL, "vfs-watchdog", &t);
+}
+
+void vn_acquire(vnode_t* vn) {
+    vn->refcount++;
 }
 
 void vn_release(vnode_t* vn) {

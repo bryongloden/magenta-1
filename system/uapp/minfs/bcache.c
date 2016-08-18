@@ -67,7 +67,7 @@ struct bcache {
     uint32_t blockmax;
 };
 
-#define bno_hash(bno) fnv_1a_tiny(bno, MINFS_HASH_BITS)
+#define bno_hash(bno) fnv1a_tiny(bno, MINFS_HASH_BITS)
 
 static_assert((1<<MINFS_HASH_BITS) == MINFS_BUCKETS,
               "minfs constants disagree");
@@ -91,6 +91,22 @@ static const char* modestr(uint32_t mode) {
 
 #define BLOCK_BUSY 0x10
 
+
+void bcache_invalidate(bcache_t* bc) {
+    block_t* blk;
+    uint32_t n = 0;
+    while ((blk = list_remove_head_type(&bc->list_lru, block_t, listnode)) != NULL) {
+        if (blk->flags & BLOCK_BUSY) {
+            panic("blk %p bno %u is busy on lru\n", blk, blk->bno);
+        }
+        // remove from hash, bno to be reassigned
+        list_delete(&blk->hashnode);
+        list_add_tail(&bc->list_free, &blk->listnode);
+        n++;
+    }
+    trace(BCACHE, "[ %d blocks dropped ]\n", n);
+}
+
 static block_t* _bcache_get(bcache_t* bc, uint32_t bno, void** data, uint32_t mode) {
     trace(BCACHE,"bcache_get() bno=%u %s\n",bno,modestr(mode));
     if (bno >= bc->blockmax) {
@@ -101,7 +117,7 @@ static block_t* _bcache_get(bcache_t* bc, uint32_t bno, void** data, uint32_t mo
     list_for_every_entry(bc->hash + bucket, blk, block_t, hashnode) {
         if (blk->bno == bno) {
             if (blk->flags & BLOCK_BUSY) {
-                panic("bno %u is busy\n", bno);
+                panic("blk %p bno %u is busy\n", blk, bno);
             }
             // remove from dirty or lru
             list_delete(&blk->listnode);
@@ -114,6 +130,9 @@ static block_t* _bcache_get(bcache_t* bc, uint32_t bno, void** data, uint32_t mo
         if ((blk = list_remove_head_type(&bc->list_free, block_t, listnode)) != NULL) {
             // nothing extra to do
         } else if ((blk = list_remove_head_type(&bc->list_lru, block_t, listnode)) != NULL) {
+            if (blk->flags & BLOCK_BUSY) {
+                panic("blk %p bno %u is busy on lru\n", blk, blk->bno);
+            }
             // remove from hash, bno to be reassigned
             list_delete(&blk->hashnode);
         } else {
@@ -136,7 +155,7 @@ done:
         list_add_tail(&bc->list_busy, &blk->listnode);
         *data = blk->data;
     }
-    //printf("get(%u) %p\n", bno, blk);
+    trace(BCACHE, "bcache_get bno=%u %p\n", bno, blk);
     return blk;
 }
 
@@ -153,6 +172,8 @@ void bcache_put(bcache_t* bc, block_t* blk, uint32_t flags) {
     if (!(blk->flags & BLOCK_BUSY)) {
         panic("bcache_put() bno=%u NOT BUSY!\n", blk->bno);
     }
+    // remove from busy list
+    list_delete(&blk->listnode);
     if ((flags | blk->flags) & BLOCK_DIRTY) {
         if (writeblk(bc->fd, blk->bno, blk->data) < 0) {
             error("block write error!\n");

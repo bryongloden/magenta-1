@@ -14,6 +14,10 @@
 #include <mxio/vfs.h>
 #include "vfs.h"
 
+struct vnode {
+    VNODE_BASE_FIELDS
+};
+
 static mx_status_t do_stat(vnode_t* vn, struct stat* s) {
     vnattr_t a;
     mx_status_t status = vn->ops->getattr(vn, &a);
@@ -77,8 +81,8 @@ int status_to_errno(mx_status_t status) {
 
 vnode_t* fake_root;
 
-#define PATH_PREFIX "(@)"
-#define PREFIX_SIZE 3
+#define PATH_PREFIX "::"
+#define PREFIX_SIZE 2
 
 static inline int check_path(const char* path) {
     if (strncmp(path, PATH_PREFIX, PREFIX_SIZE) || (fake_root == NULL)) {
@@ -95,7 +99,10 @@ int FN(open)(const char* path, int flags, mode_t mode) {
     for (fd = 0; fd < MAXFD; fd++) {
         if (fdtab[fd].vn == NULL) {
             mx_status_t status = vfs_open(fake_root, &fdtab[fd].vn, path + PREFIX_SIZE, flags, mode);
-            STATUS(status);
+            if (status < 0) {
+                STATUS(status);
+            }
+            return fd | FD_MAGIC;
         }
     }
     FAIL(EMFILE);
@@ -147,7 +154,7 @@ ssize_t FN(write)(int fd, const void* buf, size_t count) {
 }
 
 off_t FL(lseek)(int fd, off_t offset, int whence);
-off_t FL(lseek)(int fd, off_t offset, int whence) {
+off_t FN(lseek)(int fd, off_t offset, int whence) {
     file_t* f;
     FILE_WRAP(f, fd, lseek, fd, offset, whence);
 

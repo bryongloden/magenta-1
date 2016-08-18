@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-CFLAGS := -Wall -std=c11 -g
+CFLAGS := -Wall -std=c11 -g -O0
 CFLAGS += -Werror-implicit-function-declaration
 CFLAGS += -Wstrict-prototypes -Wwrite-strings
 CFLAGS += -I../../ulib/system/include
@@ -22,6 +22,7 @@ CFLAGS += -I../../../global/include
 
 LFLAGS := -Wl,-wrap,open -Wl,-wrap,unlink -Wl,-wrap,stat -Wl,-wrap,mkdir
 LFLAGS += -Wl,-wrap,close -Wl,-wrap,read -Wl,-wrap,write -Wl,-wrap,fstat
+LFLAGS += -Wl,-wrap,lseek
 
 SRCS += main.c wrap.c test.c
 SRCS += bitmap.c bcache.c vfs.c
@@ -40,10 +41,18 @@ endif
 ifneq ($(filter $(MAKECMDGOALS),gdb),)
 EXTRA := gdb -quiet -ex=r --args
 endif
+ifneq ($(filter $(MAKECMDGOALS),v),)
+TESTARGS := -v
+endif
+ifneq ($(filter $(MAKECMDGOALS),vv),)
+TESTARGS := -vv
+endif
 
 valgrind::
 vg::
 gdb::
+v:
+vv:
 
 out/%.o: %.c
 	@echo Build: $@
@@ -58,12 +67,14 @@ clean::
 	@echo Clean
 	@rm -fr out
 
+FS := out/fs@1024M
+
 mkfs: out/minfs
-	$(EXTRA) out/minfs create out/fs 256M
+	$(EXTRA) out/minfs $(FS) $(TESTARGS) create
 
 fsck: out/minfs
-	$(EXTRA) out/minfs check out/fs 256M
+	$(EXTRA) out/minfs $(FS) $(TESTARGS) check
 
 test: out/minfs
-	$(EXTRA) out/minfs test out/fs 256M
+	$(EXTRA) out/minfs $(FS) $(TESTARGS) test
 

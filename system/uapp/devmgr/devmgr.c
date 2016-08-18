@@ -150,36 +150,8 @@ mxio_dispatcher_t* devmgr_rio_dispatcher;
 #define PNMAX 16
 static const char* proto_name(uint32_t id, char buf[PNMAX]) {
     switch (id) {
-    case MX_PROTOCOL_DEVICE:
-        return "device";
-    case MX_PROTOCOL_MISC:
-        return "misc";
-    case MX_PROTOCOL_BLOCK:
-        return "block";
-    case MX_PROTOCOL_CONSOLE:
-        return "console";
-    case MX_PROTOCOL_DISPLAY:
-        return "display";
-    case MX_PROTOCOL_INPUT:
-        return "input";
-    case MX_PROTOCOL_PCI:
-        return "pci";
-    case MX_PROTOCOL_SATA:
-        return "sata";
-    case MX_PROTOCOL_USB_DEVICE:
-        return "usb-device";
-    case MX_PROTOCOL_USB_HCI:
-        return "usb-hci";
-    case MX_PROTOCOL_USB_BUS:
-        return "usb-bus";
-    case MX_PROTOCOL_USB_HUB:
-        return "usb-hub";
-    case MX_PROTOCOL_ETHERNET:
-        return "ethernet";
-    case MX_PROTOCOL_BLUETOOTH_HCI:
-        return "bluetooth-hci";
-    case MX_PROTOCOL_TPM:
-        return "tpm";
+#define DDK_PROTOCOL_DEF(tag, val, name) case val: return name;
+#include <ddk/protodefs.h>
     default:
         snprintf(buf, PNMAX, "proto-%08x", id);
         return buf;
@@ -287,9 +259,34 @@ static mx_status_t devmgr_device_probe(mx_device_t* dev, mx_driver_t* drv) {
     if (status < 0) {
         return status;
     }
+    if (list_in_list(&dev->unode)) {
+        list_delete(&dev->unode);
+    }
     dev->owner = &remote_driver;
     dev_ref_acquire(dev);
     return NO_ERROR;
+}
+
+static void devmgr_device_probe_all(mx_device_t* dev) {
+    if ((dev->flags & DEV_FLAG_UNBINDABLE) == 0) {
+        if (!device_is_bound(dev)) {
+            // first, look for a specific driver binary for this device
+            if (devmgr_driver_probe(dev) < 0) {
+                // if not found, probe all built-in drivers
+                mx_driver_t* drv = NULL;
+                list_for_every_entry (&driver_list, drv, mx_driver_t, node) {
+                    if (devmgr_device_probe(dev, drv) == NO_ERROR) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // if no driver is bound, add the device to the unmatched list
+        if (!device_is_bound(dev)) {
+            list_add_tail(&unmatched_device_list, &dev->unode);
+        }
+    }
 }
 
 mx_status_t devmgr_device_init(mx_device_t* dev, mx_driver_t* driver,
@@ -432,25 +429,8 @@ mx_status_t devmgr_device_add(mx_device_t* dev, mx_device_t* parent) {
     }
 #endif
 
-    if ((dev->flags & DEV_FLAG_UNBINDABLE) == 0) {
-        if (!device_is_bound(dev)) {
-            // first, look for a specific driver binary for this device
-            if (devmgr_driver_probe(dev) < 0) {
-                // if not found, probe all built-in drivers
-                mx_driver_t* drv = NULL;
-                list_for_every_entry (&driver_list, drv, mx_driver_t, node) {
-                    if (devmgr_device_probe(dev, drv) == NO_ERROR) {
-                        break;
-                    }
-                }
-            }
-        }
-
-        // if no driver is bound, add the device to the unmatched list
-        if (!device_is_bound(dev)) {
-            list_add_tail(&unmatched_device_list, &dev->unode);
-        }
-    }
+    // probe the device
+    devmgr_device_probe_all(dev);
 
     dev->flags &= (~DEV_FLAG_BUSY);
     return NO_ERROR;
@@ -523,6 +503,34 @@ mx_status_t devmgr_device_remove(mx_device_t* dev) {
     return NO_ERROR;
 }
 
+mx_status_t devmgr_device_rebind(mx_device_t* dev) {
+    dev->flags |= DEV_FLAG_REBIND;
+
+    // remove children
+    mx_device_t* child = NULL;
+    mx_device_t* temp = NULL;
+    list_for_every_entry_safe(&dev->children, child, temp, mx_device_t, node) {
+        devmgr_device_remove(child);
+    }
+
+    // detach from owner and call unbind, downref
+    if (dev->owner) {
+        if (dev->owner->ops.unbind) {
+            DM_UNLOCK();
+            dev->owner->ops.unbind(dev->owner, dev);
+            DM_LOCK();
+        }
+        dev->owner = NULL;
+        dev_ref_release(dev);
+    }
+
+    // probe the device again to bind
+    devmgr_device_probe_all(dev);
+
+    dev->flags &= ~DEV_FLAG_REBIND;
+    return NO_ERROR;
+}
+
 mx_status_t devmgr_device_open(mx_device_t* dev, mx_device_t** out, uint32_t flags) {
     if (dev->flags & DEV_FLAG_DEAD) {
         printf("device open: %p(%s) is dead!\n", dev, safename(dev->name));
@@ -587,8 +595,21 @@ mx_status_t devmgr_driver_remove(mx_driver_t* drv) {
     return ERR_NOT_SUPPORTED;
 }
 
-extern mx_driver_t __start_builtin_drivers[] __WEAK;
-extern mx_driver_t __stop_builtin_drivers[] __WEAK;
+#if !LIBDRIVER
+static const char* proto_names[] = {
+#define DDK_PROTOCOL_DEF(tag, val, name) name,
+#include <ddk/protodefs.h>
+    NULL,
+};
+
+static void prepopulate_protocol_dirs(void) {
+    const char** namep = proto_names;
+    while (*namep) {
+        vnode_t* vnp;
+        devfs_add_node(&vnp, vnclass, *namep++, NULL);
+    }
+}
+#endif
 
 void devmgr_init(bool devhost) {
     xprintf("devmgr: init\n");
@@ -605,6 +626,7 @@ void devmgr_init(bool devhost) {
         vnroot = devfs_get_root();
         root_dev->vnode = vnroot;
         devfs_add_node(&vnclass, vnroot, "class", NULL);
+        prepopulate_protocol_dirs();
 
         mxio_dispatcher_create(&devmgr_devhost_dispatcher, devmgr_handler);
     }
@@ -612,6 +634,9 @@ void devmgr_init(bool devhost) {
 
     mxio_dispatcher_create(&devmgr_rio_dispatcher, mxrio_handler);
 }
+
+extern mx_driver_t __start_builtin_drivers[] __WEAK;
+extern mx_driver_t __stop_builtin_drivers[] __WEAK;
 
 void devmgr_init_builtin_drivers(void) {
     mx_driver_t* drv;
